@@ -32,7 +32,7 @@ def init():
     af.register_dataset(name=config.SampleQueueDataset, uri="{},{}".format(config.KafkaConn, config.SampleQueueName))
     af.register_dataset(name=config.ValidateDataset, uri=config.ValidateFileDir)
     af.register_dataset(name=config.UserProfileDataset, uri=config.UserProfileTableName)
-    af.register_dataset(name=config.UserClickDataset, uri=config.UserClickTableName)
+    af.register_dataset(name=config.UserClickSnapshotDataset, uri=config.UserClickSnapshotTableName)
 
     af.register_metric_meta(metric_name=config.BatchACC,
                             metric_type=af.MetricType.MODEL,

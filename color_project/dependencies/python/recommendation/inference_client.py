@@ -25,5 +25,5 @@ class InferenceClient(object):
         self.uri = uri
         self.stub = InferenceServiceStub(channel=grpc.insecure_channel(uri))
 
-    def inference(self, uids):
-        return self.stub.inference(RecordRequest(uids=uids)).records
+    def inference(self, uids, rid):
+        return self.stub.inference(RecordRequest(uids=uids, rid=rid)).records

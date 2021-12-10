@@ -178,7 +178,7 @@ class InferenceUtil(object):
             record.append(self.user_dict[uid])
             record.append(users_click_dict[uid].fs_1)
             record.append(users_click_dict[uid].fs_2)
-            records.append(' '.join(map(lambda x: str(x), record)))
+            records.append(record)
         return records
 
     def inference(self, features):
@@ -188,8 +188,10 @@ class InferenceUtil(object):
         finally:
             self.lock.release()
 
-    def process_request(self, uids):
+    def process_request(self, uids, rid):
         batch_feature = self.build_features(uids)
+        db.add_user_click_snapshot_batch(request_id=rid, batch_features=batch_feature)
+        batch_feature = [" ".join(map(lambda x: str(x), feature)) for feature in batch_feature]
         inference_result = self.inference(batch_feature)
         return inference_result
 
@@ -200,7 +202,11 @@ class InferenceService(InferenceServiceServicer):
 
     def inference(self, request, context):
         uids = request.uids
-        res = self.util.process_request(uids)
+        rid = request.rid
+        try:
+            res = self.util.process_request(uids, rid)
+        except Exception as e:
+            print(e)
         return RecordResponse(records=res)
 
 

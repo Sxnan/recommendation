@@ -25,6 +25,10 @@ from typing import List, Tuple
 from recommendation import config
 from recommendation import db
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class DataStreamEnv(flink.FlinkEnv):
     """
@@ -49,8 +53,11 @@ class BuildFeature(ScalarFunction):
     def open(self, function_context: FunctionContext):
         db.init_db(uri=config.DbConn)
 
-    def eval(self, uid, country, infer, click, f1, f2):
+    def eval(self, rid, uid, country, infer, click, f1, f2):
         db.update_user_click_info(uid=uid, fs=infer + ' ' + str(click))
+        db.delete_user_click_snapshot(rid=rid, uid=uid)
+        if f1 is None or f2 is None:
+            logger.info("rid: {}, uid: {} has non joined feature".format(rid, uid))
         return ' '.join([str(uid), str(country), f1, f2, str(click)])
 
 
@@ -61,6 +68,7 @@ class RawInputReader(flink.FlinkPythonProcessor):
         t_env = execution_context.table_env
         t_env.execute_sql('''
                             create table raw_input (
+                                rid varchar,
                                 uid int,
                                 infer varchar,
                                 click int,
@@ -106,8 +114,8 @@ class UserClickReader(flink.FlinkPythonProcessor):
         table_name = execution_context.config['dataset'].uri
         print("User Click table name {}".format(table_name))
         t_env.execute_sql(f'''
-                            create table user_click (
-                                uid int,
+                            create table user_click_snapshot (
+                                id varchar,
                                 fs_1 varchar,
                                 fs_2 varchar
                             ) with (
@@ -118,7 +126,7 @@ class UserClickReader(flink.FlinkPythonProcessor):
                                 'password' = '{config.DbPassword}'
                             )
                                 ''')
-        return [t_env.from_path('user_click')]
+        return [t_env.from_path('user_click_snapshot')]
 
 
 class SampleProcessor(flink.FlinkPythonProcessor):
@@ -132,13 +140,13 @@ class SampleProcessor(flink.FlinkPythonProcessor):
 
         t_env.execute_sql('''
                     create temporary view feature_view as
-                    select feature(t.uid, t.country, t.infer, t.click, uc.fs_1, uc.fs_2) as feature, 
+                    select feature(t.rid, t.uid, t.country, t.infer, t.click, uc.fs_1, uc.fs_2) as feature, 
                         UNIX_TIMESTAMP() % 100 as bucket from
-                            (select r.uid, c.country, r.infer, r.click, r.proc_time from raw_input as r
+                            (select r.rid, r.uid, c.country, r.infer, r.click, r.proc_time from raw_input as r
                                 left outer join user_c FOR SYSTEM_TIME AS OF r.proc_time AS c
                                 on r.uid = c.uid) as t
-                            left outer join user_click FOR SYSTEM_TIME AS OF t.proc_time AS uc
-                            on t.uid = uc.uid
+                            left outer join user_click_snapshot FOR SYSTEM_TIME AS OF t.proc_time AS uc
+                            on CONCAT(t.rid, ',', CAST(t.uid AS VARCHAR)) = uc.id
                 ''')
 
         validate_sample = t_env.sql_query('''

@@ -17,6 +17,8 @@
 import threading
 import time
 import random
+import uuid
+
 from typing import List
 
 from kafka import KafkaProducer
@@ -51,10 +53,15 @@ class Agent(object):
         self.inference_uri = inference_uri
         self.ns_client = NotificationClient(server_uri='localhost:50052')
         self.interval = interval
+        if batch_size > user_count:
+            batch_size = user_count
+            print("batch size {} cannot greater than user count {}. Setting batch size to {}".format(batch_size, user_count, user_count))
         self.batch_size = batch_size
         self.lock = threading.Lock()
         self.ns_client.start_listen_event(key='update_agent', watcher=UpdateModel(self), event_type='update_agent',
                                           start_time=int(time.time() * 1000))
+        self.users = list(range(self.user_count))
+
 
     def random_user(self):
         random.seed(time.time_ns())
@@ -67,8 +74,8 @@ class Agent(object):
         finally:
             self.lock.release()
 
-    def write_log(self, uid, inference_result, click_result):
-        self.producer.send(topic=self.topic, value=bytes(str(uid) + ' ' + inference_result + ' ' + str(click_result),
+    def write_log(self, rid, uid, inference_result, click_result):
+        self.producer.send(topic=self.topic, value=bytes(str(rid) + ' ' + str(uid) + ' ' + inference_result + ' ' + str(click_result),
                                                          encoding='utf8'))
 
     def update_state(self, uid, inference_result, click_result):
@@ -77,16 +84,16 @@ class Agent(object):
     def close(self):
         self.mi.close()
 
-    def build_features(self, uids):
+    def build_features(self, uids, rid):
         users_info_dict = {}
         users_info = db.get_users_info(uids)
         for i in users_info:
             users_info_dict[i.uid] = i
 
         users_click_dict = {}
-        users_click = db.get_users_click_info(uids)
+        users_click = db.get_users_click_snapshost_batch(rid, uids)
         for i in users_click:
-            users_click_dict[i.uid] = i
+            users_click_dict[int(i.id.split(",")[1])] = i
 
         records = []
         for i in range(self.batch_size):
@@ -104,13 +111,16 @@ class Agent(object):
         start_time = time.monotonic()
         while True:
             count += 1
-            uids = []
-            for i in range(self.batch_size):
-                uid = self.random_user()
-                uids.append(uid)
-            colors_results = client.inference(uids)
+
+            if self.batch_size >= self.user_count:
+                uids = self.users
+            else:
+                uids = random.sample(self.users, self.batch_size)
+
+            rid = uuid.uuid4().hex
+            colors_results = client.inference(uids, rid)
             batch_colors = []
-            batch_features = self.build_features(uids)
+            batch_features = self.build_features(uids, rid)
             for i in range(self.batch_size):
                 colors = set(map(int, colors_results[i].split(',')))
                 batch_colors.append(colors)
@@ -120,7 +130,7 @@ class Agent(object):
                     click_result = -1
                 else:
                     click_result = click_results[i]
-                self.write_log(uid=uids[i], inference_result=colors_results[i], click_result=click_result)
+                self.write_log(rid=rid, uid=uids[i], inference_result=colors_results[i], click_result=click_result)
             time.sleep(self.interval)
             if count % 10 == 0:
                 end_time = time.monotonic()
@@ -139,7 +149,7 @@ if __name__ == '__main__':
     as_ = Agent(user_count=100,
                 checkpoint_dir=agent_model_dir,
                 topic=config.RawQueueName,
-                interval=0,
+                interval=0.2,
                 batch_size=500,
                 inference_uri='localhost:30002')
     as_.action()

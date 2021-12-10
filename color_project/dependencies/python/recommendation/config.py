@@ -24,14 +24,16 @@ UserProfileDataset = "MYSQL:user_profile"
 UserProfileTableName = "user"
 UserClickDataset = "MYSQL:user_click_history"
 UserClickTableName = "user_click"
+UserClickSnapshotDataset = "MYSQL:user_click_feature_snapshot"
+UserClickSnapshotTableName = "user_click_snapshot"
 
 RawQueueDataset = "Kafka:raw_input"
 RawQueueName = 'raw_input'
 SampleQueueDataset = "Kafka:sample_input"
 SampleQueueName = 'sample_input'
 
-DbUserName = 'root'
-DbPassword = 'root'
+DbUserName = 'sxnan'
+DbPassword = 'sxnan'
 DbConn = 'mysql://{}:{}@localhost:3306/user_info'.format(DbUserName, DbPassword)
 
 ModelDir = '/tmp/model'

@@ -34,14 +34,18 @@ def workflow():
         raw_input = af.read_dataset(dataset_info=config.RawQueueDataset, read_dataset_processor=RawInputReader())
         user_profile = af.read_dataset(dataset_info=config.UserProfileDataset,
                                        read_dataset_processor=UserProfileReader())
-        user_click = af.read_dataset(dataset_info=config.UserClickDataset, read_dataset_processor=UserClickReader())
+        user_click = af.read_dataset(dataset_info=config.UserClickSnapshotDataset,
+                                     read_dataset_processor=UserClickReader())
         validate_sample, sample = \
-            af.user_define_operation(input=[raw_input, user_profile, user_click], processor=SampleProcessor(), output_num=2)
+            af.user_define_operation(input=[raw_input, user_profile, user_click], processor=SampleProcessor(),
+                                     output_num=2)
 
         af.write_dataset(input=sample, dataset_info=config.SampleQueueDataset,
                          write_dataset_processor=QueueSinkProcessor())
-        af.write_dataset(input=sample, dataset_info=config.SampleFileDataset, write_dataset_processor=FileSinkProcessor())
-        af.write_dataset(input=validate_sample, dataset_info=config.ValidateDataset, write_dataset_processor=FileSinkProcessor())
+        af.write_dataset(input=sample, dataset_info=config.SampleFileDataset,
+                         write_dataset_processor=FileSinkProcessor())
+        af.write_dataset(input=validate_sample, dataset_info=config.ValidateDataset,
+                         write_dataset_processor=FileSinkProcessor())
 
     with af.job_config(job_name='batch_train'):
         flink.set_flink_env(TrainFlinkEnv())
@@ -82,8 +86,8 @@ def workflow():
     # Run workflow
     af.workflow_operation.stop_all_workflow_executions(af.current_workflow_config().workflow_name)
     af.workflow_operation.submit_workflow(af.current_workflow_config().workflow_name)
-    workflow_execution = af.workflow_operation.start_new_workflow_execution(af.current_workflow_config().workflow_name)
-    print(workflow_execution)
+    # workflow_execution = af.workflow_operation.start_new_workflow_execution(af.current_workflow_config().workflow_name)
+    # print(workflow_execution)
 
 
 if __name__ == '__main__':

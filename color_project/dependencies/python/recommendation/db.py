@@ -15,7 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 import contextlib
-
 from functools import wraps
 
 from sqlalchemy import create_engine, Column, String, Integer
@@ -112,6 +111,13 @@ class UserClick(Base):
     fs_2 = Column(String(1024), nullable=False)
 
 
+class UserClickSnapshot(Base):
+    __tablename__ = "user_click_snapshot"
+    id = Column(String(128), primary_key=True)
+    fs_1 = Column(String(1024), nullable=False)
+    fs_2 = Column(String(1024), nullable=False)
+
+
 def init_db(uri=None):
     global SQL_ALCHEMY_CONN
     if uri is not None:
@@ -147,9 +153,42 @@ def update_user_click_info(uid, fs, session=None):
     user_click.fs_1 = fs
     session.commit()
 
+@provide_session
+def add_user_click_snapshot_batch(request_id: str, batch_features, session=None):
+    inserted_id = set()
+    for feature in batch_features:
+        uid, _, fs1, fs2 = feature
+        snapshot_id = make_snapshot_id(request_id, uid)
+        if snapshot_id in inserted_id:
+            continue
+        snapshot = UserClickSnapshot()
+        snapshot.id = snapshot_id
+        snapshot.fs_1 = fs1
+        snapshot.fs_2 = fs2
+        session.add(snapshot)
+        inserted_id.add(snapshot_id)
+    session.commit()
+
+
+def make_snapshot_id(request_id, uid):
+    return str(request_id) + "," + str(uid)
+
+
+@provide_session
+def get_users_click_snapshost_batch(rid, uids, session=None):
+    snapshot_ids = [make_snapshot_id(rid, uid) for uid in uids]
+    return session.query(UserClickSnapshot).filter(UserClickSnapshot.id.in_(snapshot_ids)).all()
+
+
+@provide_session
+def delete_user_click_snapshot(rid, uid, session=None):
+    session.query(UserClickSnapshot).filter(UserClickSnapshot.id == make_snapshot_id(rid, uid)).delete()
+    session.commit()
+
 
 if __name__ == '__main__':
     from recommendation import config
+
     init_db(config.DbConn)
     res = get_users_click_info([2, 3, 6])
     for r in res:
